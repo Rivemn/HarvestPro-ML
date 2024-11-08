@@ -1,71 +1,101 @@
-from flask import Flask, jsonify, request, redirect
+from flask import Flask, jsonify, request
 from flasgger import Swagger
-import requests
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 
 app = Flask(__name__)
-swagger = Swagger(app)  # Инициализация Swagger
+swagger = Swagger(app)
 
-API_KEY = '01aebdb82a1de522e3276a1d5bd32d0b'
+# Загрузка и предобработка данных
+data = pd.read_csv("fields_data.csv")
+# Создание дамми-переменных для всех типов почвы
+data = pd.get_dummies(data, columns=['soil_type'], drop_first=True)
 
-@app.route('/')
-def index():
-    return redirect('/apidocs/')
+# Разделение данных на признаки и целевую переменную
+X = data.drop('yield', axis=1)
+y = data['yield']
 
+# Разделение на тренировочные и тестовые данные
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-@app.route('/weather', methods=['GET'])
-def get_weather():
+# Инициализация и обучение модели
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# Оценка модели на тестовой выборке
+y_pred = model.predict(X_test)
+mse = mean_squared_error(y_test, y_pred)
+
+@app.route('/predict_yield', methods=['POST'])
+def predict_yield():
     """
-    Get weather data by city
+    Endpoint для предсказания урожайности на основе данных о почве и погоде
     ---
     parameters:
-      - name: city
-        in: query
-        type: string
+      - name: input_data
+        in: body
         required: true
-        description: Name of the city to get the weather data for
+        schema:
+          type: object
+          properties:
+            ph_level:
+              type: number
+              example: 6.5
+            n_content:
+              type: number
+              example: 2.3
+            p_content:
+              type: number
+              example: 1.7
+            k_content:
+              type: number
+              example: 2.1
+            temperature:
+              type: number
+              example: 23
+            rainfall:
+              type: number
+              example: 90
+            humidity:
+              type: number
+              example: 55
+            soil_type_chernozem:
+              type: integer
+              example: 1  # 1 если чернозем, 0 иначе
+            soil_type_clay:
+              type: integer
+              example: 0  # 1 если глинистая почва, 0 иначе
+            soil_type_loam:
+              type: integer
+              example: 0  # 1 если суглинок, 0 иначе
+            soil_type_sandy:
+              type: integer
+              example: 0  # 1 если песчаная почва, 0 иначе
     responses:
       200:
-        description: Weather recommendations based on the current weather
-        schema:
-          type: array
-          items:
-            type: string
-      400:
-        description: Error fetching weather data
+        description: Predicted yield
     """
-    city = request.args.get('city', default='Moscow', type=str)
-    try:
-        weather_data = get_weather_data(city)
-        recommendations = analyze_weather(weather_data)
-        return jsonify(recommendations)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    # Получение входных данных
+    input_data = request.get_json()
 
-def get_weather_data(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
-    response = requests.get(url)
+    # Приведение входных данных к DataFrame
+    input_df = pd.DataFrame([input_data])
 
-    if response.status_code == 200:
-        return response.json()
-    else:
-        raise Exception(f"Error fetching weather data: {response.status_code}")
+    # Убедитесь, что все необходимые столбцы присутствуют
+    for col in X.columns:
+        if col not in input_df.columns:
+            input_df[col] = 0  # Добавьте недостающие столбцы с нулевым значением
 
-def analyze_weather(data):
-    temperature = data['main']['temp']
-    weather_condition = data['weather'][0]['description']
+    # Предсказание урожайности
+    yield_prediction = model.predict(input_df[X.columns])[0]
 
-    recommendations = []
-    if temperature < 10:
-        recommendations.append("It is not recommended to plant, the temperature is too low.")
-    elif 10 <= temperature < 20:
-        recommendations.append("You can plant, but keep an eye on the forecasts.")
-    else:
-        recommendations.append("Great time for sowing.")
+    return jsonify({
+        "predicted_yield": yield_prediction,
+        "model_mse": mse
+    })
 
-    if 'rain' in weather_condition.lower():
-        recommendations.append("Rain is expected, watering is recommended after precipitation.")
 
-    return recommendations
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
