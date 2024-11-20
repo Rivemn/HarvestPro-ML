@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask
 from flasgger import Swagger
 from routes import blueprints  # Импортируем все blueprints из routes
