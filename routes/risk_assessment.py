@@ -5,8 +5,8 @@ import numpy as np
 
 risk_assessment_bp = Blueprint('risk_assessment', __name__)
 
-# Загрузка модели
-model = joblib.load("risk_model.pkl")
+# Загрузка модели (указываем путь к модели)
+model = joblib.load("model/risk_model.pkl")
 
 @risk_assessment_bp.route('/risk-assessment', methods=['POST'])
 @swag_from({
@@ -51,7 +51,7 @@ model = joblib.load("risk_model.pkl")
 def risk_assessment():
     # Получение данных от клиента
     data = request.json
-    features = np.array([[
+    features = np.array([[  # Преобразуем данные клиента в массив
         data["temperature"],
         data["rainfall"],
         data["humidity"],

@@ -5,7 +5,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 
 # Загрузка и предобработка данных
-data = pd.read_csv("fields_data.csv")
+data = pd.read_csv("data/fields_data.csv")
 data = pd.get_dummies(data, columns=['soil_type'], drop_first=True)
 
 # Разделение данных на признаки и целевую переменную
